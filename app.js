@@ -1879,6 +1879,7 @@ window.addEmp=async function(){
   if(supabaseClient && STORAGE_MODE==='supabase'){
     try{
       const saved=await DB_API.insert('employees', empData);
+      console.log('ℹ️ Supabase insert response:', saved);
       if(saved && saved.id){
         emp.id = saved.id;
         savedToSupabase = true;
