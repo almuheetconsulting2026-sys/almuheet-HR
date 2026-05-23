@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إعداد Supabase - نظام المحيط للموارد البشرية</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f5f5; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #1B4F8A; margin-bottom: 20px; text-align: center; }
+        .status { padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+        .btn { background: #1B4F8A; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; margin: 10px 5px; }
+        .btn:hover { background: #0d3a6b; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        .log { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0; max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+        .progress { width: 100%; height: 30px; background: #e9ecef; border-radius: 5px; margin: 10px 0; overflow: hidden; }
+        .progress-bar { height: 100%; background: #1B4F8A; transition: width 0.3s; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 إعداد Supabase لنظام المحيط للموارد البشرية</h1>
+        
+        <div class="status info" id="status">
+            جاري الاتصال بـ Supabase...
+        </div>
+        
+        <div class="progress">
+            <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+        </div>
+        
+        <button class="btn" id="setupBtn" onclick="setupSupabase()">بدء الإعداد</button>
+        <button class="btn" onclick="window.location.href='index.html'">فتح النظام</button>
+        
+        <div class="log" id="log"></div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://hzzbkyqcxyjqfwvtcizq.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6emJreXFjeHlqcWZ3dnRjaXpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1MzEzMDQsImV4cCI6MjA5NTEwNzMwNH0.YBN2AoNsJS3pMZ04iS3yLWX5z360UgWAOaYCn6Y42T4';
+        
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        const sqlCommands = `
+-- Enable UUID extension
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- EMPLOYEES
+CREATE TABLE IF NOT EXISTS employees (
+  id          BIGSERIAL PRIMARY KEY,
+  name        TEXT NOT NULL,
+  name_en     TEXT,
+  title       TEXT,
+  dept        TEXT NOT NULL,
+  phone       TEXT,
+  email       TEXT,
+  national_id TEXT,
+  nationality TEXT,
+  join_date   DATE,
+  salary      NUMERIC(12,2) DEFAULT 0,
+  housing     NUMERIC(12,2) DEFAULT 0,
+  transport   NUMERIC(12,2) DEFAULT 0,
+  other_allowance NUMERIC(12,2) DEFAULT 0,
+  deductions  NUMERIC(12,2) DEFAULT 0,
+  status      TEXT DEFAULT 'نشط',
+  notes       TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ATTENDANCE
+CREATE TABLE IF NOT EXISTS attendance (
+  id          BIGSERIAL PRIMARY KEY,
+  emp_id      BIGINT REFERENCES employees(id) ON DELETE CASCADE,
+  date        DATE NOT NULL,
+  check_in    TEXT,
+  check_out   TEXT,
+  status      TEXT DEFAULT 'حاضر',
+  notes       TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- LEAVES
+CREATE TABLE IF NOT EXISTS leaves (
+  id          BIGSERIAL PRIMARY KEY,
+  emp_id      BIGINT REFERENCES employees(id) ON DELETE CASCADE,
+  type        TEXT NOT NULL,
+  start_date  DATE NOT NULL,
+  end_date    DATE NOT NULL,
+  reason      TEXT,
+  status      TEXT DEFAULT 'معلقة',
+  approved_by TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- PERFORMANCE
+CREATE TABLE IF NOT EXISTS performances (
+  id          BIGSERIAL PRIMARY KEY,
+  emp_id      BIGINT REFERENCES employees(id) ON DELETE CASCADE,
+  period      TEXT NOT NULL,
+  rating      TEXT NOT NULL,
+  notes       TEXT,
+  reviewer    TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- TASKS
+CREATE TABLE IF NOT EXISTS tasks (
+  id          BIGSERIAL PRIMARY KEY,
+  title       TEXT NOT NULL,
+  description TEXT,
+  assignee    TEXT,
+  emp_id      BIGINT REFERENCES employees(id) ON DELETE SET NULL,
+  priority    TEXT DEFAULT 'متوسطة',
+  due_date    DATE,
+  completed   BOOLEAN DEFAULT FALSE,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- DOCUMENTS
+CREATE TABLE IF NOT EXISTS documents (
+  id          BIGSERIAL PRIMARY KEY,
+  emp_id      BIGINT REFERENCES employees(id) ON DELETE CASCADE,
+  title       TEXT NOT NULL,
+  type        TEXT,
+  issue_date  DATE,
+  expiry_date DATE,
+  notes       TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- DISCIPLINARY
+CREATE TABLE IF NOT EXISTS disciplinary (
+  id          BIGSERIAL PRIMARY KEY,
+  emp_id      BIGINT REFERENCES employees(id) ON DELETE CASCADE,
+  type        TEXT NOT NULL,
+  reason      TEXT NOT NULL,
+  date        DATE NOT NULL,
+  action      TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- PAYROLL HISTORY
+CREATE TABLE IF NOT EXISTS payroll_history (
+  id          BIGSERIAL PRIMARY KEY,
+  month       TEXT NOT NULL UNIQUE,
+  label       TEXT NOT NULL,
+  total       NUMERIC(14,2) DEFAULT 0,
+  snapshot    JSONB NOT NULL DEFAULT '[]',
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- AUDIT LOGS
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id          BIGSERIAL PRIMARY KEY,
+  ts          TIMESTAMPTZ DEFAULT NOW(),
+  user_name   TEXT,
+  action      TEXT NOT NULL,
+  details     TEXT
+);
+
+-- NOTIFICATIONS
+CREATE TABLE IF NOT EXISTS notifications (
+  id          BIGSERIAL PRIMARY KEY,
+  text        TEXT NOT NULL,
+  type        TEXT DEFAULT 'info',
+  is_read     BOOLEAN DEFAULT FALSE,
+  ts          TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- APP USERS
+CREATE TABLE IF NOT EXISTS app_users (
+  id          BIGSERIAL PRIMARY KEY,
+  username    TEXT UNIQUE NOT NULL,
+  pass_hash   TEXT NOT NULL,
+  name        TEXT NOT NULL,
+  name_en     TEXT,
+  role        TEXT NOT NULL DEFAULT 'employee',
+  label       TEXT,
+  label_en    TEXT,
+  initials    TEXT,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- APP SETTINGS
+CREATE TABLE IF NOT EXISTS app_settings (
+  key         TEXT PRIMARY KEY,
+  value       TEXT NOT NULL,
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- INDEXES
+CREATE INDEX IF NOT EXISTS idx_attendance_emp_id ON attendance(emp_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(date);
+CREATE INDEX IF NOT EXISTS idx_leaves_emp_id ON leaves(emp_id);
+CREATE INDEX IF NOT EXISTS idx_leaves_status ON leaves(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_emp_id ON tasks(emp_id);
+CREATE INDEX IF NOT EXISTS idx_documents_emp_id ON documents(emp_id);
+CREATE INDEX IF NOT EXISTS idx_documents_expiry ON documents(expiry_date);
+CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_logs(ts DESC);
+
+-- DEFAULT DATA
+INSERT INTO app_settings (key, value) VALUES
+  ('companyName', 'المحيط للاستشارات الهندسية'),
+  ('workStart', '8'),
+  ('workEnd', '17'),
+  ('sessionTimeout', '30'),
+  ('currency', 'ر.ق'),
+  ('language', 'ar')
+ON CONFLICT (key) DO NOTHING;
+
+INSERT INTO app_users (username, pass_hash, name, role, label, initials) VALUES
+  ('admin',    'sha256:240be518fabd2724ddb6f04eeb1da5967448d7e831186422d52b2e4a33f8d8d6f', 'مدير النظام',   'admin',    'مدير موارد بشرية', 'مد'),
+  ('manager',  'sha256:c7d759c5b73b9b2af5b69ac21cac5e0f54cd0e0e5acde8c4c8e2a7de9a1b2c3d', 'أحمد المهندس',  'manager',  'مدير مشروع',       'أح'),
+  ('employee', 'sha256:e2fc714c4727ee9395f324cd2e7f331f0e58b3d4e86e87e7b19d4df7e8a5c6b7', 'سارة علي',      'employee', 'موظف',             'سع')
+ON CONFLICT (username) DO NOTHING;
+
+-- REALTIME
+ALTER PUBLICATION supabase_realtime ADD TABLE employees;
+ALTER PUBLICATION supabase_realtime ADD TABLE attendance;
+ALTER PUBLICATION supabase_realtime ADD TABLE leaves;
+ALTER PUBLICATION supabase_realtime ADD TABLE tasks;
+ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+        `;
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString('ar-SA');
+            const color = type === 'error' ? 'red' : type === 'success' ? 'green' : 'black';
+            logDiv.innerHTML += `<div style="color: ${color}">[${timestamp}] ${message}</div>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+        }
+        
+        function updateProgress(percent) {
+            document.getElementById('progressBar').style.width = percent + '%';
+        }
+        
+        async function setupSupabase() {
+            const btn = document.getElementById('setupBtn');
+            btn.disabled = true;
+            
+            try {
+                log('بدء الاتصال بـ Supabase...');
+                updateStatus('جاري الاتصال بـ Supabase...', 'info');
+                
+                // Test connection
+                const { data, error } = await supabase.from('app_settings').select('*').limit(1);
+                if (error && error.code !== 'PGRST116') {
+                    throw error;
+                }
+                
+                log('✅ الاتصال بـ Supabase نجح', 'success');
+                updateProgress(20);
+                
+                // Execute SQL using Supabase Management API
+                log('⚠️ ملاحظة: يجب تنفيذ SQL يدوياً في Supabase Dashboard', 'info');
+                log('يرجى اتباع الخطوات التالية:', 'info');
+                log('1. افتح https://supabase.com/dashboard', 'info');
+                log('2. اختر المشروع: hzzbkyqcxyjqfwvtcizq', 'info');
+                log('3. اذهب إلى SQL Editor', 'info');
+                log('4. انسخ محتوى ملف supabase/schema.sql', 'info');
+                log('5. الصقه في المحرر وانقر Run', 'info');
+                
+                updateStatus('يرجى تنفيذ SQL يدوياً في Supabase Dashboard', 'info');
+                updateProgress(50);
+                
+                // Check if tables exist
+                setTimeout(async () => {
+                    try {
+                        const { data: tables } = await supabase.from('employees').select('*').limit(1);
+                        if (tables !== null) {
+                            log('✅ الجداول موجودة بالفعل!', 'success');
+                            updateStatus('✅ الإعداد مكتمل! النظام جاهز للاستخدام', 'success');
+                            updateProgress(100);
+                        }
+                    } catch (e) {
+                        log('⚠️ لم يتم العثور على الجداول بعد', 'error');
+                    }
+                }, 2000);
+                
+            } catch (error) {
+                log(`❌ خطأ: ${error.message}`, 'error');
+                updateStatus('حدث خطأ أثناء الإعداد', 'error');
+                console.error(error);
+            }
+            
+            btn.disabled = false;
+        }
+        
+        // Auto-check on load
+        window.onload = async () => {
+            try {
+                const { data } = await supabase.from('app_settings').select('*').limit(1);
+                if (data !== null) {
+                    log('✅ الجداول موجودة بالفعل!', 'success');
+                    updateStatus('✅ الإعداد مكتمل! النظام جاهز للاستخدام', 'success');
+                    updateProgress(100);
+                } else {
+                    log('⚠️ يجب إنشاء الجداول أولاً', 'info');
+                    updateStatus('جاهز للإعداد - انقر على "بدء الإعداد"', 'info');
+                }
+            } catch (e) {
+                log('⚠️ يجب إنشاء الجداول أولاً', 'info');
+                updateStatus('جاهز للإعداد - انقر على "بدء الإعداد"', 'info');
+            }
+        };
+    </script>
+</body>
+</html>
