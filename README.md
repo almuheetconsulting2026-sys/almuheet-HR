@@ -22,19 +22,23 @@
 
 ### 1. إعداد Supabase
 
-1. اذهب إلى [supabase.com](https://supabase.com) وأنشئ مشروعاً جديداً
-2. من Dashboard → SQL Editor، شغّل ملف `supabase/schema.sql`
-3. من Settings → API، انسخ:
-   - **Project URL**
-   - **anon/public key**
+**الطريقة السريعة:**
+1. افتح صفحة `setup_supabase.html` في المتصفح
+2. اتبع التعليمات الظاهرة على الشاشة
+
+**الطريقة اليدوية:**
+1. اذهب إلى [supabase.com/dashboard](https://supabase.com/dashboard)
+2. اختر المشروع: `hzzbkyqcxyjqfwvtcizq`
+3. من Dashboard → SQL Editor، شغّل ملف `supabase/schema.sql`
+4. تأكد من إنشاء جميع الجداول المطلوبة
 
 ### 2. إعداد ملف الإعدادات
 
-افتح `src/js/config.js` وضع بياناتك:
+تم إعداد ملف `src/js/config.js` بالفعل ببيانات Supabase الخاصة بك:
 
 ```javascript
-const SUPABASE_URL = 'https://your-project.supabase.co';
-const SUPABASE_ANON_KEY = 'your-anon-key-here';
+const SUPABASE_URL = 'https://hzzbkyqcxyjqfwvtcizq.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...';
 ```
 
 ### 3. رفع على GitHub Pages
