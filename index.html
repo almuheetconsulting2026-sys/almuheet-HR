@@ -7,7 +7,11 @@
 <!-- Supabase SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- App Config & Storage Layer -->
-<script src="src/js/config.js"></script>
+<script>
+const SUPABASE_URL = 'https://hzzbkyqcxyjqfwvtcizq.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh6emJreXFjeHlqcWZ3dnRjaXpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1MzEzMDQsImV4cCI6MjA5NTEwNzMwNH0.YBN2AoNsJS3pMZ04iS3yLWX5z360UgWAOaYCn6Y42T4';
+const STORAGE_MODE = 'supabase';
+</script>
 <script src="src/js/supabase.js"></script>
 <link rel="stylesheet" href="src/css/styles.css">
 </head>
