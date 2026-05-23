@@ -1852,8 +1852,11 @@ window.closeModal=function(){document.getElementById('modalContainer').innerHTML
 window.addEmp=async function(){
   const name=document.getElementById('eN').value.trim();
   if(!name){showToast('خطأ','الاسم مطلوب','error');return;}
-  const emp={
-    name,
+  
+  showLoadingOverlay('جارٍ إضافة الموظف...');
+  
+  const empData={
+    name:name,
     title:document.getElementById('eT').value,
     dept:document.getElementById('eD').value,
     phone:document.getElementById('ePh').value,
@@ -1862,26 +1865,48 @@ window.addEmp=async function(){
     salary:+document.getElementById('eSal').value||0,
     housing:+document.getElementById('eHou').value||0,
     transport:+document.getElementById('eTra').value||0,
-    joinDate:document.getElementById('eJ').value,
+    join_date:document.getElementById('eJ').value||null,
     status:document.getElementById('eSt').value,
     contract:document.getElementById('eCon').value,
-    deductions:0,otherAllowance:0
+    deductions:0,
+    other_allowance:0
   };
-  if(supabaseClient){
-    const saved=await DB_API.insert('employees',{
-      name:emp.name, title:emp.title, dept:emp.dept, phone:emp.phone,
-      email:emp.email, nationality:emp.nationality, salary:emp.salary,
-      housing:emp.housing, transport:emp.transport, join_date:emp.joinDate||null,
-      status:emp.status, deductions:0, other_allowance:0
-    });
-    if(saved) emp.id=saved.id;
+  
+  let emp = {...empData, joinDate: empData.join_date};
+  let savedToSupabase = false;
+  
+  // حفظ في Supabase أولاً
+  if(supabaseClient && STORAGE_MODE==='supabase'){
+    try{
+      const saved=await DB_API.insert('employees', empData);
+      if(saved && saved.id){
+        emp.id = saved.id;
+        savedToSupabase = true;
+        console.log('✅ تم حفظ الموظف في Supabase — ID:', emp.id);
+      } else {
+        console.warn('⚠️ فشل الحفظ في Supabase، سيتم الحفظ محلياً فقط');
+        showToast('تنبيه', 'تم حفظ الموظف محلياً لأن Supabase لم يستجب', 'warn');
+        emp.id = DB.nextId.emp++;
+      }
+    } catch(e){
+      console.error('❌ خطأ في الحفظ:', e);
+      showToast('خطأ', 'فشل الاتصال بقاعدة البيانات', 'error');
+      emp.id = DB.nextId.emp++;
+    }
+  } else {
+    emp.id = DB.nextId.emp++;
   }
-  emp.id=emp.id||DB.nextId.emp++;
+  
   DB.employees.push(emp);
-  addAudit('إضافة موظف',emp.name);
-  addNotifItem(`👤 تمت إضافة الموظف ${emp.name}`,'success');
-  showToast('تمت إضافة الموظف',emp.name,'success');
-  closeModal();saveDB();renderEmployees();
+  addAudit('إضافة موظف', emp.name);
+  addNotifItem(`👤 تمت إضافة الموظف ${emp.name}`, 'success');
+  
+  showToast('✅ تمت إضافة الموظف', emp.name + (savedToSupabase ? ' (محفوظ في السحابة)' : ''), 'success');
+  
+  hideLoadingOverlay();
+  closeModal();
+  saveDB();
+  renderEmployees();
 };
 
 window.openEditEmp=function(id){

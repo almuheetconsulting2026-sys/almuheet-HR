@@ -39,7 +39,14 @@ const DB_API = {
       return newRow;
     }
     const { data, error } = await supabaseClient.from(table).insert(row).select().single();
-    if (error) { console.error(`insert ${table}:`, error); return null; }
+    if (error) {
+      console.error(`insert ${table}:`, error);
+      if (error.details || error.hint) {
+        console.error('Supabase error details:', error.details, error.hint);
+      }
+      return null;
+    }
+    console.log(`✅ Supabase insert ${table} success`, data);
     return data;
   },
 
