@@ -171,3 +171,32 @@ async function migrateLocalToSupabase() {
     console.error('Migration error:', e);
   }
 }
+
+// ===================== TEST CONNECTION =====================
+async function testSupabaseConnection() {
+  if (!supabaseClient) {
+    console.warn('❌ Supabase client not initialized');
+    return false;
+  }
+  
+  try {
+    console.log('🔄 Testing Supabase connection...');
+    // اختبار بسيط: جلب أول 1 سجل من employees
+    const { data, error, count } = await supabaseClient
+      .from('employees')
+      .select('*', { count: 'exact' })
+      .limit(1);
+    
+    if (error) {
+      console.error('❌ Test failed:', error.message);
+      return false;
+    }
+    
+    console.log('✅ Connection test successful!');
+    console.log(`📊 Total employees in database: ${count}`);
+    return true;
+  } catch (e) {
+    console.error('❌ Connection test error:', e.message);
+    return false;
+  }
+}

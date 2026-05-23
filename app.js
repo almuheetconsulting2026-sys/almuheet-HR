@@ -2677,6 +2677,10 @@ window.setLang=function(lang){
 // ===================== INIT =====================
 initApp().then(()=>{
   updateNotifBadge();
+  // اختبار الاتصال بـ Supabase
+  if(typeof testSupabaseConnection === 'function'){
+    setTimeout(()=>testSupabaseConnection(), 500);
+  }
 });
 
 // ===================== DARK MODE =====================
