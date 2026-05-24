@@ -51,8 +51,17 @@ async function initApp(){
   if(STORAGE_MODE==='supabase' && supabaseClient){
     try{
       showLoadingOverlay('جارٍ الاتصال بقاعدة البيانات...');
-      const cloud = await DB_API.syncAll();
-      // دمج البيانات السحابية
+      let cloud = await DB_API.syncAll();
+      const hasLocalData = DB.employees.length > 0;
+      const hasMigrated = localStorage.getItem('almuhit_migrated') === '1';
+
+      if (cloud.employees.length > 0 && hasLocalData && !hasMigrated) {
+        const result = await migrateLocalToSupabase();
+        if (result.migrated > 0) {
+          cloud = await DB_API.syncAll();
+        }
+      }
+
       if(cloud.employees.length > 0 || DB.employees.length === 0){
         DB.employees = cloud.employees.map(mapEmployee);
         DB.attendance = cloud.attendance.map(mapAttendance);
@@ -65,8 +74,24 @@ async function initApp(){
         DB.auditLogs = (cloud.auditLogs||[]).map(a=>({...a, user: a.user_name, ts: a.ts}));
         DB.notifications = (cloud.notifications||[]).map(n=>({...n, read: n.is_read}));
         saveLocalOnly();
-      } else if(!localStorage.getItem('almuhit_migrated') && DB.employees.length > 0){
-        await migrateLocalToSupabase();
+      } else if(!hasMigrated && DB.employees.length > 0){
+        const result = await migrateLocalToSupabase();
+        if (result.migrated > 0) {
+          cloud = await DB_API.syncAll();
+          if (cloud.employees.length > 0) {
+            DB.employees = cloud.employees.map(mapEmployee);
+            DB.attendance = cloud.attendance.map(mapAttendance);
+            DB.leaves = cloud.leaves.map(mapLeave);
+            DB.performances = cloud.performances || [];
+            DB.tasks = cloud.tasks.map(mapTask);
+            DB.documents = cloud.documents.map(mapDocument);
+            DB.disciplinary = cloud.disciplinary || [];
+            DB.payrollHistory = cloud.payrollHistory.map(ph=>({...ph, snapshot: typeof ph.snapshot==='string'?JSON.parse(ph.snapshot):ph.snapshot}));
+            DB.auditLogs = (cloud.auditLogs||[]).map(a=>({...a, user: a.user_name, ts: a.ts}));
+            DB.notifications = (cloud.notifications||[]).map(n=>({...n, read: n.is_read}));
+            saveLocalOnly();
+          }
+        }
       }
       _isSupabaseReady = true;
       hideLoadingOverlay();

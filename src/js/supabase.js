@@ -44,6 +44,9 @@ const DB_API = {
       if (error.details || error.hint) {
         console.error('Supabase error details:', error.details, error.hint);
       }
+      if (error.code === '42501') {
+        console.error('Supabase RLS blocked the insert. تأكد من إعداد سياسة row-level security على جدول', table);
+      }
       return null;
     }
     console.log(`✅ Supabase insert ${table} success`, data);
@@ -151,31 +154,40 @@ function localGetAllSettings() {
 
 // ===================== MIGRATION: localStorage → Supabase =====================
 async function migrateLocalToSupabase() {
-  if (!supabaseClient) return;
+  if (!supabaseClient) return { migrated: 0, failed: 0 };
   const oldData = localStorage.getItem('mueheet_hr_v2');
-  if (!oldData) return;
+  if (!oldData) return { migrated: 0, failed: 0 };
   try {
     const db = JSON.parse(oldData);
     let migrated = 0;
+    let failed = 0;
 
     // Migrate employees
     if (db.employees?.length) {
       for (const e of db.employees) {
-        await DB_API.insert('employees', {
+        const saved = await DB_API.insert('employees', {
           name: e.name, title: e.title, dept: e.dept, phone: e.phone,
           email: e.email, join_date: e.joinDate, salary: e.salary || 0,
           housing: e.housing || 0, transport: e.transport || 0,
           other_allowance: e.otherAllowance || 0, deductions: e.deductions || 0,
           status: e.status || 'نشط', notes: e.notes
         });
-        migrated++;
+        if (saved && saved.id) {
+          migrated++;
+        } else {
+          failed++;
+          console.warn('⚠️ Employee migration failed for:', e.name);
+        }
       }
     }
-    console.log(`✅ Migrated ${migrated} employees to Supabase`);
-    // Mark as migrated
-    localStorage.setItem('almuhit_migrated', '1');
+    console.log(`✅ Migrated ${migrated} employees to Supabase${failed ? `, failed ${failed}` : ''}`);
+    if (migrated > 0 && failed === 0) {
+      localStorage.setItem('almuhit_migrated', '1');
+    }
+    return { migrated, failed };
   } catch (e) {
     console.error('Migration error:', e);
+    return { migrated: 0, failed: 0 };
   }
 }
 
