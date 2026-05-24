@@ -1878,7 +1878,21 @@ window.addEmp=async function(){
   // حفظ في Supabase أولاً
   if(supabaseClient && STORAGE_MODE==='supabase'){
     try{
-      const saved=await DB_API.insert('employees', empData);
+      const saved=await DB_API.insert('employees', {
+      name: empData.name,
+      title: empData.title,
+      dept: empData.dept,
+      phone: empData.phone,
+      email: empData.email,
+      nationality: empData.nationality,
+      salary: empData.salary,
+      housing: empData.housing,
+      transport: empData.transport,
+      join_date: empData.join_date,
+      status: empData.status,
+      deductions: empData.deductions,
+      other_allowance: empData.other_allowance
+    });
       console.log('ℹ️ Supabase insert response:', saved);
       if(saved && saved.id){
         emp.id = saved.id;
