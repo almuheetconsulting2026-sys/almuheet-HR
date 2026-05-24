@@ -28,8 +28,59 @@ function saveDB(){
 }
 
 async function syncToSupabase(){
-  // لا نزامن كل DB دفعة واحدة — التغييرات تُحفظ عبر DB_API مباشرة
-  // هذه الدالة تُستخدم للتحديث الفوري
+  if(!supabaseClient || STORAGE_MODE!=='supabase') return;
+  
+  try{
+    // مزامنة الموظفين
+    for(const emp of DB.employees){
+      const existing = await supabaseClient.from('employees').select('id').eq('id', emp.id).single();
+      if(existing.data){
+        // تحديث إذا كان موجوداً
+        await supabaseClient.from('employees').update({
+          name: emp.name,
+          name_en: emp.nameEn,
+          title: emp.title,
+          dept: emp.dept,
+          phone: emp.phone,
+          email: emp.email,
+          national_id: emp.nationalId,
+          nationality: emp.nationality,
+          join_date: emp.joinDate,
+          salary: emp.salary,
+          housing: emp.housing,
+          transport: emp.transport,
+          other_allowance: emp.otherAllowance,
+          deductions: emp.deductions,
+          status: emp.status,
+          notes: emp.notes
+        }).eq('id', emp.id);
+      } else {
+        // إضافة إذا كان جديداً
+        await supabaseClient.from('employees').insert({
+          id: emp.id,
+          name: emp.name,
+          name_en: emp.nameEn,
+          title: emp.title,
+          dept: emp.dept,
+          phone: emp.phone,
+          email: emp.email,
+          national_id: emp.nationalId,
+          nationality: emp.nationality,
+          join_date: emp.joinDate,
+          salary: emp.salary,
+          housing: emp.housing,
+          transport: emp.transport,
+          other_allowance: emp.otherAllowance,
+          deductions: emp.deductions,
+          status: emp.status,
+          notes: emp.notes
+        });
+      }
+    }
+    console.log('✅ تمت مزامنة البيانات مع Supabase');
+  } catch(e){
+    console.error('❌ خطأ في المزامنة:', e);
+  }
 }
 
 function loadDB(){
@@ -1882,42 +1933,31 @@ window.addEmp=async function(){
   
   const empData={
     name:name,
+    name_en: '', // يمكن إضافته لاحقاً
     title:document.getElementById('eT').value,
     dept:document.getElementById('eD').value,
     phone:document.getElementById('ePh').value,
     email:document.getElementById('eEm').value,
+    national_id: '',
     nationality:document.getElementById('eNat').value,
     salary:+document.getElementById('eSal').value||0,
     housing:+document.getElementById('eHou').value||0,
     transport:+document.getElementById('eTra').value||0,
+    other_allowance:0,
+    deductions:0,
     join_date:document.getElementById('eJ').value||null,
     status:document.getElementById('eSt').value,
-    contract:document.getElementById('eCon').value,
-    deductions:0,
-    other_allowance:0
+    notes: ''
   };
   
-  let emp = {...empData, joinDate: empData.join_date};
+  let emp = {...empData, joinDate: empData.join_date, nameEn: empData.name_en, nationalId: empData.national_id, otherAllowance: empData.other_allowance};
   let savedToSupabase = false;
   
   // حفظ في Supabase أولاً
   if(supabaseClient && STORAGE_MODE==='supabase'){
     try{
-      const saved=await DB_API.insert('employees', {
-      name: empData.name,
-      title: empData.title,
-      dept: empData.dept,
-      phone: empData.phone,
-      email: empData.email,
-      nationality: empData.nationality,
-      salary: empData.salary,
-      housing: empData.housing,
-      transport: empData.transport,
-      join_date: empData.join_date,
-      status: empData.status,
-      deductions: empData.deductions,
-      other_allowance: empData.other_allowance
-    });
+      console.log('🔄 محاولة الحفظ في Supabase...');
+      const saved=await DB_API.insert('employees', empData);
       console.log('ℹ️ Supabase insert response:', saved);
       if(saved && saved.id){
         emp.id = saved.id;
@@ -1930,7 +1970,7 @@ window.addEmp=async function(){
       }
     } catch(e){
       console.error('❌ خطأ في الحفظ:', e);
-      showToast('خطأ', 'فشل الاتصال بقاعدة البيانات', 'error');
+      showToast('خطأ', 'فشل الاتصال بقاعدة البيانات: ' + e.message, 'error');
       emp.id = DB.nextId.emp++;
     }
   } else {
@@ -1941,7 +1981,7 @@ window.addEmp=async function(){
   addAudit('إضافة موظف', emp.name);
   addNotifItem(`👤 تمت إضافة الموظف ${emp.name}`, 'success');
   
-  showToast('✅ تمت إضافة الموظف', emp.name + (savedToSupabase ? ' (محفوظ في السحابة)' : ''), 'success');
+  showToast('✅ تمت إضافة الموظف', emp.name + (savedToSupabase ? ' (محفوظ في السحابة)' : ' (محفظ محلياً)'), 'success');
   
   hideLoadingOverlay();
   closeModal();
@@ -1975,16 +2015,55 @@ window.updateEmp=async function(id){
   e.salary=+document.getElementById('eSal').value||0;
   e.joinDate=document.getElementById('eJ').value;
   e.status=document.getElementById('eSt').value;
-  if(supabaseClient) await DB_API.update('employees',id,{
-    name:e.name,title:e.title,dept:e.dept,phone:e.phone,
-    salary:e.salary,join_date:e.joinDate||null,status:e.status,updated_at:new Date().toISOString()
-  });
+  
+  if(supabaseClient && STORAGE_MODE==='supabase'){
+    try{
+      const updated=await DB_API.update('employees',id,{
+        name:e.name,
+        name_en:e.nameEn||'',
+        title:e.title,
+        dept:e.dept,
+        phone:e.phone,
+        email:e.email,
+        national_id:e.nationalId||'',
+        nationality:e.nationality,
+        salary:e.salary,
+        housing:e.housing||0,
+        transport:e.transport||0,
+        other_allowance:e.otherAllowance||0,
+        deductions:e.deductions||0,
+        join_date:e.joinDate||null,
+        status:e.status,
+        notes:e.notes||'',
+        updated_at:new Date().toISOString()
+      });
+      if(updated){
+        console.log('✅ تم تحديث الموظف في Supabase:', e.name);
+      } else {
+        console.warn('⚠️ فشل التحديث في Supabase');
+      }
+    } catch(err){
+      console.error('❌ خطأ في تحديث الموظف:', err);
+    }
+  }
+  
   addAudit('تعديل موظف',e.name);closeModal();saveDB();renderEmployees();
 };
 window.delEmp=function(id){
   const e=getEmp(id);
   showConfirm(`حذف الموظف ${e?.name}؟ سيتم حذف جميع بياناته.`,async()=>{
-    if(supabaseClient) await DB_API.delete('employees',id);
+    if(supabaseClient && STORAGE_MODE==='supabase'){
+      try{
+        const deleted=await DB_API.delete('employees',id);
+        if(deleted){
+          console.log('✅ تم حذف الموظف من Supabase:', e?.name);
+        } else {
+          console.warn('⚠️ فشل الحذف من Supabase');
+        }
+      } catch(err){
+        console.error('❌ خطأ في حذف الموظف:', err);
+      }
+    }
     DB.employees=DB.employees.filter(x=>x.id!==id);
     addAudit('حذف موظف',e?.name);saveDB();renderEmployees();
   });
@@ -1993,9 +2072,18 @@ window.delEmp=function(id){
 window.saveAtt=async function(){
   const empId=+document.getElementById('aEmp').value;
   const row={empId,date:document.getElementById('aDate').value,timeIn:document.getElementById('aIn').value,timeOut:document.getElementById('aOut').value,status:document.getElementById('aSt').value,notes:document.getElementById('aNotes').value};
-  if(supabaseClient){
-    const saved=await DB_API.insert('attendance',{emp_id:empId,date:row.date,check_in:row.timeIn||null,check_out:row.timeOut||null,status:row.status,notes:row.notes});
-    if(saved) row.id=saved.id;
+  if(supabaseClient && STORAGE_MODE==='supabase'){
+    try{
+      const saved=await DB_API.insert('attendance',{emp_id:empId,date:row.date,check_in:row.timeIn||null,check_out:row.timeOut||null,status:row.status,notes:row.notes});
+      if(saved && saved.id){
+        row.id=saved.id;
+        console.log('✅ تم حفظ الحضور في Supabase');
+      } else {
+        console.warn('⚠️ فشل حفظ الحضور في Supabase');
+      }
+    } catch(err){
+      console.error('❌ خطأ في حفظ الحضور:', err);
+    }
   }
   DB.attendance.push({id:row.id||DB.nextId.att++,...row});
   addAudit('تسجيل حضور',getEmp(empId)?.name);closeModal();saveDB();renderAttendance();
@@ -2006,9 +2094,18 @@ window.saveLeave=async function(){
   const end=document.getElementById('lEnd').value;
   if(!start||!end||end<start){showToast('خطأ','تواريخ الإجازة غير صحيحة','error');return;}
   const row={empId,type:document.getElementById('lType').value,startDate:start,endDate:end,reason:document.getElementById('lReason').value,status:'معلقة'};
-  if(supabaseClient){
-    const saved=await DB_API.insert('leaves',{emp_id:empId,type:row.type,start_date:start,end_date:end,reason:row.reason,status:'معلقة'});
-    if(saved) row.id=saved.id;
+  if(supabaseClient && STORAGE_MODE==='supabase'){
+    try{
+      const saved=await DB_API.insert('leaves',{emp_id:empId,type:row.type,start_date:start,end_date:end,reason:row.reason,status:'معلقة'});
+      if(saved && saved.id){
+        row.id=saved.id;
+        console.log('✅ تم حفظ طلب الإجازة في Supabase');
+      } else {
+        console.warn('⚠️ فشل حفظ طلب الإجازة في Supabase');
+      }
+    } catch(err){
+      console.error('❌ خطأ في حفظ طلب الإجازة:', err);
+    }
   }
   DB.leaves.push({id:row.id||DB.nextId.leave++,...row});
   const emp=getEmp(empId);
@@ -2019,9 +2116,18 @@ window.saveLeave=async function(){
 window.savePerf=async function(){
   const empId=+document.getElementById('pEmp').value;
   const row={empId,year:document.getElementById('pYear').value,rating:document.getElementById('pRating').value,productivity:document.getElementById('pProd').value,teamwork:document.getElementById('pTeam').value,comments:document.getElementById('pNotes').value};
-  if(supabaseClient){
-    const saved=await DB_API.insert('performances',{emp_id:empId,period:row.year,rating:row.rating,notes:row.comments,reviewer:currentUser.name});
-    if(saved) row.id=saved.id;
+  if(supabaseClient && STORAGE_MODE==='supabase'){
+    try{
+      const saved=await DB_API.insert('performances',{emp_id:empId,period:row.year,rating:row.rating,notes:row.comments,reviewer:currentUser.name});
+      if(saved && saved.id){
+        row.id=saved.id;
+        console.log('✅ تم حفظ تقييم الأداء في Supabase');
+      } else {
+        console.warn('⚠️ فشل حفظ تقييم الأداء في Supabase');
+      }
+    } catch(err){
+      console.error('❌ خطأ في حفظ تقييم الأداء:', err);
+    }
   }
   DB.performances.push({id:row.id||DB.nextId.perf++,...row});
   addAudit('تقييم أداء',getEmp(empId)?.name);closeModal();saveDB();renderPerformance();
@@ -2030,7 +2136,21 @@ window.saveTrain=async function(){
   const empId=+document.getElementById('tEmp').value;
   const course=document.getElementById('tCourse').value;
   if(!course){showToast('خطأ','اسم الدورة مطلوب','error');return;}
-  DB.trainings.push({id:DB.nextId.train++,empId,course,date:document.getElementById('tDate').value,endDate:document.getElementById('tEnd').value,cost:+document.getElementById('tCost').value||0,organization:document.getElementById('tOrg').value,status:document.getElementById('tStatus').value});
+  const row={empId,course,date:document.getElementById('tDate').value,endDate:document.getElementById('tEnd').value,cost:+document.getElementById('tCost').value||0,organization:document.getElementById('tOrg').value,status:document.getElementById('tStatus').value};
+  if(supabaseClient && STORAGE_MODE==='supabase'){
+    try{
+      const saved=await DB_API.insert('trainings',{emp_id:empId,course,date:row.date,end_date:row.endDate,cost:row.cost,organization:row.organization,status:row.status});
+      if(saved && saved.id){
+        row.id=saved.id;
+        console.log('✅ تم حفظ التدريب في Supabase');
+      } else {
+        console.warn('⚠️ فشل حفظ التدريب في Supabase');
+      }
+    } catch(err){
+      console.error('❌ خطأ في حفظ التدريب:', err);
+    }
+  }
+  DB.trainings.push({id:row.id||DB.nextId.train++,...row});
   addAudit('إضافة تدريب',course);closeModal();saveDB();renderTraining();
 };
 window.saveTask=async function(){
@@ -2038,9 +2158,18 @@ window.saveTask=async function(){
   if(!title){showToast('خطأ','عنوان المهمة مطلوب','error');return;}
   const empId=+document.getElementById('tkEmp').value;
   const row={empId,title,dueDate:document.getElementById('tkDue').value,priority:document.getElementById('tkPrio').value,description:document.getElementById('tkDesc').value,completed:false};
-  if(supabaseClient){
-    const saved=await DB_API.insert('tasks',{emp_id:empId,title,due_date:row.dueDate||null,priority:row.priority,description:row.description,completed:false});
-    if(saved) row.id=saved.id;
+  if(supabaseClient && STORAGE_MODE==='supabase'){
+    try{
+      const saved=await DB_API.insert('tasks',{emp_id:empId,title,due_date:row.dueDate||null,priority:row.priority,description:row.description,completed:false});
+      if(saved && saved.id){
+        row.id=saved.id;
+        console.log('✅ تم حفظ المهمة في Supabase');
+      } else {
+        console.warn('⚠️ فشل حفظ المهمة في Supabase');
+      }
+    } catch(err){
+      console.error('❌ خطأ في حفظ المهمة:', err);
+    }
   }
   DB.tasks.push({id:row.id||DB.nextId.task++,...row});
   addAudit('إضافة مهمة',title);closeModal();saveDB();renderTasks();
@@ -2050,9 +2179,18 @@ window.saveDoc=async function(){
   if(!name){showToast('خطأ','اسم المستند مطلوب','error');return;}
   const empId=+document.getElementById('dEmp').value;
   const row={empId,name,title:name,type:document.getElementById('dType').value,expiryDate:document.getElementById('dExpiry').value||null,uploadDate:today()};
-  if(supabaseClient){
-    const saved=await DB_API.insert('documents',{emp_id:empId,title:name,type:row.type,expiry_date:row.expiryDate||null});
-    if(saved) row.id=saved.id;
+  if(supabaseClient && STORAGE_MODE==='supabase'){
+    try{
+      const saved=await DB_API.insert('documents',{emp_id:empId,title:name,type:row.type,expiry_date:row.expiryDate||null});
+      if(saved && saved.id){
+        row.id=saved.id;
+        console.log('✅ تم حفظ المستند في Supabase');
+      } else {
+        console.warn('⚠️ فشل حفظ المستند في Supabase');
+      }
+    } catch(err){
+      console.error('❌ خطأ في حفظ المستند:', err);
+    }
   }
   DB.documents.push({id:row.id||DB.nextId.doc++,...row});
   addAudit('رفع مستند',name);closeModal();saveDB();renderDocuments();
@@ -2060,9 +2198,18 @@ window.saveDoc=async function(){
 window.saveDisc=async function(){
   const empId=+document.getElementById('dcEmp').value;
   const row={empId,type:document.getElementById('dcType').value,date:document.getElementById('dcDate').value,action:document.getElementById('dcAction').value,notes:document.getElementById('dcNotes').value};
-  if(supabaseClient){
-    const saved=await DB_API.insert('disciplinary',{emp_id:empId,type:row.type,date:row.date,reason:row.notes,action:row.action});
-    if(saved) row.id=saved.id;
+  if(supabaseClient && STORAGE_MODE==='supabase'){
+    try{
+      const saved=await DB_API.insert('disciplinary',{emp_id:empId,type:row.type,date:row.date,reason:row.notes,action:row.action});
+      if(saved && saved.id){
+        row.id=saved.id;
+        console.log('✅ تم حفظ المخالفة التأديبية في Supabase');
+      } else {
+        console.warn('⚠️ فشل حفظ المخالفة التأديبية في Supabase');
+      }
+    } catch(err){
+      console.error('❌ خطأ في حفظ المخالفة التأديبية:', err);
+    }
   }
   DB.disciplinary.push({id:row.id||DB.nextId.disc++,...row});
   addAudit('مخالفة تأديبية',getEmp(empId)?.name);closeModal();saveDB();renderDisciplinary();
