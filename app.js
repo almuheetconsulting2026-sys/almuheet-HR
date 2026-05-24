@@ -99,6 +99,12 @@ async function initApp(){
   initSupabase();
   loadDB();
 
+  // تحميل المستخدمين من Supabase أولاً
+  USERS = await loadUsers();
+
+  // تأكد من هجرة كلمات المرور إلى sha256
+  try{ await migratePasswords(); await saveUsers(USERS); }catch(e){}
+
   if(STORAGE_MODE==='supabase' && supabaseClient){
     try{
       showLoadingOverlay('جارٍ الاتصال بقاعدة البيانات...');
@@ -242,24 +248,84 @@ async function migratePasswords(){
       changed=true;
     }
   }
-  if(changed) saveUsers(USERS);
+  if(changed) await saveUsers(USERS);
 }
 
-// Dynamic users stored separately in localStorage
-function loadUsers(){
+// Dynamic users stored separately in localStorage and Supabase
+async function loadUsers(){
+  // جلب المستخدمين من Supabase أولاً إذا كان متاحاً
+  if(STORAGE_MODE==='supabase' && supabaseClient){
+    try{
+      const { data, error } = await supabaseClient.from('app_users').select('*');
+      if(data && data.length){
+        const uobj = {};
+        data.forEach(r => {
+          if(!r.username) return;
+          uobj[r.username] = {
+            pass: r.pass_hash || r.password || r.pass || 'changeMe',
+            name: r.name || '',
+            nameEn: r.name_en || r.nameEn || '',
+            role: r.role || 'employee',
+            label: r.label || '',
+            labelEn: r.label_en || '',
+            initials: r.initials || ''
+          };
+        });
+        if(Object.keys(uobj).length){
+          console.log('✅ تم تحميل المستخدمين من Supabase');
+          // حفظ محلياً كنسخة احتياطية
+          try{localStorage.setItem('mueheet_users_v2',JSON.stringify(uobj));}catch(e){}
+          return uobj;
+        }
+      }
+    }catch(e){
+      console.warn('فشل جلب المستخدمين من Supabase:', e);
+    }
+  }
+  
+  // العودة إلى localStorage إذا فشل Supabase
   try{
     const u=localStorage.getItem('mueheet_users_v2');
     if(u) return JSON.parse(u);
   }catch(e){}
+  
+  // المستخدمون الافتراضيون
   return {
     admin:{pass:'admin123',name:'مدير النظام',role:'admin',label:'مدير موارد بشرية',labelEn:'HR Manager',initials:'مد',nameEn:'System Admin'},
     manager:{pass:'mgr123',name:'أحمد المهندس',role:'manager',label:'مدير مشروع',labelEn:'Project Manager',initials:'أح',nameEn:'Ahmed Al-Muhandis'},
     employee:{pass:'emp123',name:'سارة علي',role:'employee',label:'موظف',labelEn:'Employee',initials:'سع',nameEn:'Sara Ali'},
   };
 }
-function saveUsers(u){try{localStorage.setItem('mueheet_users_v2',JSON.stringify(u));}catch(e){}}
-let USERS=loadUsers();
-migratePasswords();
+async function saveUsers(u){
+  // حفظ محلياً دائماً كنسخة احتياطية
+  try{localStorage.setItem('mueheet_users_v2',JSON.stringify(u));}catch(e){}
+  
+  // حفظ في Supabase إذا كان متاحاً
+  if(STORAGE_MODE==='supabase' && supabaseClient){
+    try{
+      const rows = Object.entries(u).map(([username,user])=>({
+        username: username,
+        pass_hash: user.pass,
+        name: user.name || '',
+        name_en: user.nameEn || '',
+        role: user.role || 'employee',
+        label: user.label || '',
+        label_en: user.labelEn || '',
+        initials: user.initials || ''
+      }));
+      const { data, error } = await supabaseClient.from('app_users').upsert(rows, { onConflict: 'username' });
+      if(error){
+        console.warn('فشل حفظ المستخدمين في Supabase:', error.message);
+      } else {
+        console.log('✅ تم حفظ المستخدمين في Supabase');
+      }
+    }catch(e){
+      console.warn('فشل مزامنة المستخدمين:', e);
+    }
+  }
+}
+
+let USERS;
 
 // XSS sanitization
 function escHtml(s){
@@ -466,9 +532,21 @@ function showConfirm(msg, onYes, title='تأكيد الإجراء'){
   showModal(`<div class="modal-title">⚠️ ${title}</div>
     <div style="font-size:14px;padding:8px 0 20px;">${msg}</div>
     <div class="modal-footer">
-      <button class="btn btn-danger" onclick="closeModal();(${onYes.toString()})();">نعم، متأكد</button>
+      <button class="btn btn-danger" id="confirmYesBtn">نعم، متأكد</button>
       <button class="btn" onclick="closeModal()">إلغاء</button>
     </div>`);
+
+  const confirmButton = document.getElementById('confirmYesBtn');
+  if(confirmButton){
+    confirmButton.addEventListener('click', async () => {
+      try {
+        await onYes();
+      } catch (error) {
+        console.error('Confirm action failed:', error);
+      }
+      closeModal();
+    }, { once: true });
+  }
 }
 
 // ===================== MOBILE SIDEBAR =====================
@@ -2780,14 +2858,14 @@ window.doAddUser=async function(){
   const hashedPass=await hashPassword(pass);
   USERS[uname]={pass:hashedPass,name,nameEn,role,label:label||(role==='admin'?'مدير':role==='manager'?'مدير مشروع':'موظف'),
     labelEn:labelEn||(role==='admin'?'Admin':role==='manager'?'Project Manager':'Employee'),initials};
-  saveUsers(USERS);
+  await saveUsers(USERS);
   addAudit(currentLang==='en'?'Add User':'إضافة مستخدم',uname);
   addNotifItem(`👤 ${T('userAdded')} - ${uname}`,'success');
   showToast(T('userAdded'),'','success');
   closeModal();renderSettings();
 };
 
-window.doEditUser=function(username){
+window.doEditUser=async function(username){
   const u=USERS[username];if(!u) return;
   u.name=document.getElementById('euName').value.trim()||u.name;
   u.nameEn=document.getElementById('euNameEn').value.trim();
@@ -2795,7 +2873,7 @@ window.doEditUser=function(username){
   u.initials=document.getElementById('euInitials').value.trim()||u.initials;
   u.label=document.getElementById('euLabel').value.trim()||u.label;
   u.labelEn=document.getElementById('euLabelEn').value.trim()||u.labelEn;
-  saveUsers(USERS);
+  await saveUsers(USERS);
   addAudit(currentLang==='en'?'Edit User':'تعديل مستخدم',username);
   closeModal();renderSettings();
 };
@@ -2806,7 +2884,7 @@ window.doChangePassword=async function(username){
   if(!np){document.getElementById('cpErr').textContent=T('newPassword').replace(' *','')+' '+T('required');return;}
   if(np!==cp){document.getElementById('cpErr').textContent=T('pwMismatch');return;}
   USERS[username].pass=await hashPassword(np);
-  saveUsers(USERS);
+  await saveUsers(USERS);
   addAudit(currentLang==='en'?'Change Password':'تغيير كلمة مرور',username);
   closeModal();
   showToast(T('pwChanged'),'','success');
@@ -2814,7 +2892,7 @@ window.doChangePassword=async function(username){
 
 window.confirmDeleteUser=function(username){
   if(currentUser.name===USERS[username]?.name){showToast('خطأ',T('cannotDeleteSelf'),'error');return;}
-  showConfirm(T('deleteUserConfirm')+' "'+username+'"?',()=>{delete USERS[username];saveUsers(USERS);addAudit(currentLang==='en'?'Delete User':'حذف مستخدم',username);renderSettings();});
+  showConfirm(T('deleteUserConfirm')+' "'+username+'"?',async()=>{delete USERS[username];await saveUsers(USERS);addAudit(currentLang==='en'?'Delete User':'حذف مستخدم',username);renderSettings();});
 };
 
 window.confirmResetData=function(){
